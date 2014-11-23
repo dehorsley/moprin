@@ -1,0 +1,116 @@
+#!/usr/bin/env python2
+
+#Moprin: oprin for muliple stations!
+#Dave Horsley
+#Nov. 2014
+
+import atexit
+import os
+import sys
+import readline
+import time
+from subprocess import Popen, PIPE
+
+#Readline hist and completion
+histfile = os.path.join(os.path.expanduser("~"), ".moprin_hist")
+try:
+    readline.read_history_file(histfile)
+except IOError:
+    pass
+atexit.register(readline.write_history_file, histfile)
+
+
+#For readline completion function. We could, in principle, do more fancy things here.
+class Completer:
+    def __init__(self, words):
+        self.words = words
+        self.prefix = None
+    def __call__(self, prefix, index):
+        if prefix != self.prefix:
+            self.matching_words = [ w for w in self.words if w.startswith(prefix) ]
+            self.prefix = prefix
+        try:
+            return self.matching_words[index]
+        except IndexError:
+            return None
+
+
+commands = ['clkoff','maserdelay','exit','stations']
+
+#If the fscmd.ctl file is available, append the commands to the tab completion list
+#lines starting with '*' are comments and ignored
+try:
+    # f = open('fscmd.ctl')
+    f = open('/usr2/fs/control/fscmd.ctl')
+    commands.extend( [l.split()[0] for l in f if l[0] != '*'])
+
+except:
+    pass
+
+commands.sort()
+completer = Completer(commands)
+readline.parse_and_bind("tab: complete")
+readline.set_completer(completer)
+
+#Fildsystem computers of the corresponding station id
+pc =  { "hb": "pcfshb",
+        "ke": "pcfske",
+        "yg": "pcfsyg",
+        "cd": "pcfscd",
+        "ho": "hobart",
+        }
+
+if len(sys.argv) == 1:
+    stns = ["hb", "ke", "yg"]
+else:
+    stns = sys.argv[1:]
+    for stn in stns:
+        if stn not in pc:
+            print("Unknown station: %s" % stn)
+            sys.exit()
+
+
+running = True
+while running:
+    try:
+        line = raw_input('>')
+    except EOFError: #Exit on Ctrl+D
+        print("exit")
+        sys.exit()
+    except KeyboardInterrupt: #Kill line on Ctrl+C
+        print("^C")
+        continue
+
+    if line in ['exit', 'quit']:
+        sys.exit()
+
+    elif line.startswith('stations'):
+        new_stns = line.split()
+        if len(new_stns) == 1:
+            print(" ".join(stns))
+        else:
+            new_stns = new_stns[1:]
+            for stn in new_stns:
+                if stn not in pc:
+                    print("Unknown station: '%s' " % stn)
+                    break
+            else:
+                stns = new_stns
+        
+    elif line == 'help':
+        print("""'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
+To set the remote stations for the session, use the command 'stations' followed by the two letter station IDs separated by spaces. \
+Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
+Running the 'stations' command without arguments gives the list of active stations. 
+
+The text '$s' in a command will be replaced by the corresponding two-letter station ID when sent to the remote field systems.
+
+To exit moprin, type 'exit' or press Ctrl+D.
+
+History is stored in ~/.moprin_hist and tab-completion is enabled.
+""")
+    
+    elif line != '':
+        #async send commands via ssh
+        for stn in stns:
+            Popen(['ssh',pc[stn], 'inject_snap','\'%s\'' % line.replace("$s",stn)])
