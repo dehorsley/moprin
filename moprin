@@ -41,7 +41,7 @@ SAVE = "\033[s"
 RESTORE = "\033[u"
 PREVLINE = "\033[F"
 
-BLACK = "\033[30m"
+BLACK = "\033[0m"
 RED =   "\033[31m"
 GREEN = "\033[32m"
 YELLOW ="\033[33m"
@@ -160,6 +160,7 @@ def process_input(l):
     global jobs
 
     if l is None:
+        print()
         sys.exit()
 
     l = l.decode()
