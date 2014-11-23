@@ -10,17 +10,14 @@ import sys
 import time
 from select import select
 import socket
-import time
 from subprocess import Popen, PIPE
 from random import random
 
-
 import readline
+
 # python doesn't include a binding to rl_callback_read_char, so we have to import it manually
 import ctypes
-
 rl_lib = ctypes.cdll.LoadLibrary("libreadline.so")
-
 readline.callback_handler_remove = rl_lib.rl_callback_handler_remove
 readline.callback_read_char = rl_lib.rl_callback_read_char
 readline.delete_text = rl_lib.rl_delete_text
@@ -78,6 +75,7 @@ class Completer:
             return None
 
 
+#Extra commands can go here
 commands = ['clkoff','maserdelay','exit','stations']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
@@ -129,7 +127,7 @@ class Job:
 
         for stn in self.stations:
             w 
-            if self.procs[stn].poll():
+            if self.procs[stn].poll() != None:
                 if self.procs[stn].returncode == 0:
                     self.states[stn] = True
                 else:
@@ -150,11 +148,11 @@ class Job:
 
 
 #Fildsystem computers of the corresponding station id
-pc =  { "hb": "pcfshb.phys.utas.edu.au",
-        "ke": "pcfske.phys.utas.edu.au",
-        "yg": "pcfsyg.phys.utas.edu.au",
-        "ho": "hobart.phys.utas.edu.au",
-        "cd": "pcfscd.phys.utas.edu.au",
+pc =  { "hb": "pcfshb",
+        "ke": "pcfske",
+        "yg": "pcfsyg",
+        "ho": "hobart",
+        "cd": "pcfscd",
         }
 
 def process_input(l):
