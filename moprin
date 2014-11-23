@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #Moprin: oprin for muliple stations!
 #Dave Horsley
@@ -7,9 +7,52 @@
 import atexit
 import os
 import sys
-import readline
+import time
+from select import select
+import socket
 import time
 from subprocess import Popen, PIPE
+from random import random
+
+
+import readline
+# python doesn't include a binding to rl_callback_read_char, so we have to import it manually
+import ctypes
+
+rl_lib = ctypes.cdll.LoadLibrary("libreadline.so")
+
+readline.callback_handler_remove = rl_lib.rl_callback_handler_remove
+readline.callback_read_char = rl_lib.rl_callback_read_char
+readline.delete_text = rl_lib.rl_delete_text
+readline.redisplay = rl_lib.rl_redisplay
+readline.end = ctypes.c_int.in_dll(rl_lib,'rl_end')
+
+# the callback needs special treatment:
+rlcallbackfunctype = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)
+def setcallbackfunc(prompt, thefunc):
+    prompt = prompt.encode()
+    readline.callback = rlcallbackfunctype(thefunc)
+    rl_lib.rl_callback_handler_install(prompt, readline.callback)
+
+readline.callback_handler_install = setcallbackfunc
+
+
+#ANSI codes for cursor motion and colours
+HIDE = "\033[?25l"
+SHOW = "\033[?25h"
+SAVE = "\033[s"
+RESTORE = "\033[u"
+PREVLINE = "\033[F"
+
+BLACK = "\033[30m"
+RED =   "\033[31m"
+GREEN = "\033[32m"
+YELLOW ="\033[33m"
+
+
+#Colours used for the job state
+statecols = {None: YELLOW, False: RED, True: GREEN}
+
 
 #Readline hist and completion
 histfile = os.path.join(os.path.expanduser("~"), ".moprin_hist")
@@ -52,42 +95,88 @@ completer = Completer(commands)
 readline.parse_and_bind("tab: complete")
 readline.set_completer(completer)
 
+#Class to store info about the previous commands sent,
+#so we can update their status and display it in the correct location
+
+class Job:
+    def __init__(self, command):
+        self.command = command
+
+        global ln
+        self.ln = ln-1
+        global stations
+        self.stations = stations
+
+        # Dict of the Popen objects for each request
+        self.procs = dict.fromkeys(stations) 
+        # states of each process
+        #   None: pending, True: done successfully, False: failed
+        self.states = dict.fromkeys(stations) 
+
+        # Global complete flag
+        self.done = False
+
+        for stn in self.stations:
+            global pc
+            self.procs[stn] = Popen(['ssh','-q',pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)])
+            
+
+    def update(self):
+        # Update the states based on procs
+
+        numdone = 0
+        prompt = []
+
+        for stn in self.stations:
+            w 
+            if self.procs[stn].poll():
+                if self.procs[stn].returncode == 0:
+                    self.states[stn] = True
+                else:
+                    self.states[stn] = False
+                numdone += 1
+
+            prompt.append("%s%s%s" %(statecols[self.states[stn]], stn, BLACK))
+
+
+        if numdone == len(self.stations):
+            self.done = True
+
+        prompt = "-".join(prompt)
+
+        global ln
+        #TODO: be more intelligent about moving up lines
+        print( "".join([HIDE , SAVE , (ln-self.ln)*PREVLINE ,  prompt , "> " , RESTORE , SHOW]) ,end='',flush=True)
+
+
 #Fildsystem computers of the corresponding station id
-pc =  { "hb": "pcfshb",
-        "ke": "pcfske",
-        "yg": "pcfsyg",
-        "cd": "pcfscd",
-        "ho": "hobart",
+pc =  { "hb": "pcfshb.phys.utas.edu.au",
+        "ke": "pcfske.phys.utas.edu.au",
+        "yg": "pcfsyg.phys.utas.edu.au",
+        "ho": "hobart.phys.utas.edu.au",
+        "cd": "pcfscd.phys.utas.edu.au",
         }
 
-if len(sys.argv) == 1:
-    stns = ["hb", "ke", "yg"]
-else:
-    stns = sys.argv[1:]
-    for stn in stns:
-        if stn not in pc:
-            print("Unknown station: %s" % stn)
-            sys.exit()
+def process_input(l):
+    global stations
+    global jobs
 
-
-running = True
-while running:
-    try:
-        line = raw_input('>')
-    except EOFError: #Exit on Ctrl+D
-        print("exit")
-        sys.exit()
-    except KeyboardInterrupt: #Kill line on Ctrl+C
-        print("^C")
-        continue
-
-    if line in ['exit', 'quit']:
+    if l is None:
         sys.exit()
 
-    elif line.startswith('stations'):
-        new_stns = line.split()
+    l = l.decode()
+    l = l.strip()
+
+    global ln
+    ln = ln + 1
+
+    if l in ['exit', 'quit']:
+        sys.exit()
+
+    elif l.startswith('stations'):
+        new_stns = l.split()
         if len(new_stns) == 1:
-            print(" ".join(stns))
+            print(" ".join(stations))
         else:
             new_stns = new_stns[1:]
             for stn in new_stns:
@@ -95,9 +184,9 @@ while running:
                     print("Unknown station: '%s' " % stn)
                     break
             else:
-                stns = new_stns
+                stations = new_stns
         
-    elif line == 'help':
+    elif l == 'help':
         print("""'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
 To set the remote stations for the session, use the command 'stations' followed by the two letter station IDs separated by spaces. \
 Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
@@ -110,7 +199,50 @@ To exit moprin, type 'exit' or press Ctrl+D.
 History is stored in ~/.moprin_hist and tab-completion is enabled.
 """)
     
-    elif line != '':
+    elif l != '':
+        readline.add_history(l)
         #async send commands via ssh
-        for stn in stns:
-            Popen(['ssh',pc[stn], 'inject_snap','\'%s\'' % line.replace("$s",stn)])
+        j = Job(l)
+        jobs.append(j)
+
+        # print(len(jobs))
+        # ln += 1
+
+    prompt = '%s> ' % '-'.join(stations)
+    setcallbackfunc(prompt, process_input)
+
+#Globals to store the line number, the running jobs and the slave stations
+ln = 1
+jobs = []
+if len(sys.argv) == 1:
+    stations = ["hb", "ke", "yg"]
+else:
+    stations = sys.argv[1:]
+    for stn in stations:
+        if stn not in pc:
+            print("Unknown station: %s" % stn)
+            sys.exit()
+
+prompt = '%s> ' % '-'.join(stations)
+setcallbackfunc(prompt, process_input)
+#Main Loop
+while True:
+    try:
+        r, w, x = select([sys.stdin], [], [], 0.1)
+
+        if sys.stdin in r:
+            readline.callback_read_char()
+        else:
+            #Between key presses, tidy up the rest
+            for i, job in enumerate(jobs):
+                job.update()
+                if job.done:
+                    del jobs[i]
+
+    except KeyboardInterrupt: #Kill line on Ctrl+C
+        print("^C")
+        ln += 1
+        readline.delete_text(0,readline.end)
+        prompt = '%s> ' % '-'.join(stations)
+        setcallbackfunc(prompt, process_input)
+        readline.redisplay()
