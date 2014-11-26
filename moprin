@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #Moprin: oprin for muliple stations!
 #Dave Horsley
@@ -17,7 +17,7 @@ import readline
 
 # python doesn't include a binding to rl_callback_read_char, so we have to import it manually
 import ctypes
-rl_lib = ctypes.cdll.LoadLibrary("libreadline.so")
+rl_lib = ctypes.cdll.LoadLibrary("libreadline.so.6")
 readline.callback_handler_remove = rl_lib.rl_callback_handler_remove
 readline.callback_read_char = rl_lib.rl_callback_read_char
 readline.delete_text = rl_lib.rl_delete_text
@@ -76,7 +76,7 @@ class Completer:
 
 
 #Extra commands can go here
-commands = ['clkoff','maserdelay','exit','stations']
+commands = ['clkoff','maserdelay','exit','stations', 'stns']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
 #lines starting with '*' are comments and ignored
@@ -116,7 +116,7 @@ class Job:
 
         for stn in self.stations:
             global pc
-            self.procs[stn] = Popen(['ssh','-q',pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)])
+            self.procs[stn] = Popen(['ssh','-q',pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)],stderr=PIPE,stdout=PIPE)
             
 
     def update(self):
@@ -126,9 +126,9 @@ class Job:
         prompt = []
 
         for stn in self.stations:
-            w 
-            if self.procs[stn].poll() != None:
-                if self.procs[stn].returncode == 0:
+            proc = self.procs[stn]
+            if proc.poll() != None:
+                if proc.returncode == 0:
                     self.states[stn] = True
                 else:
                     self.states[stn] = False
@@ -160,7 +160,7 @@ def process_input(l):
     global jobs
 
     if l is None:
-        print()
+        print("")
         sys.exit()
 
     l = l.decode()
@@ -172,7 +172,7 @@ def process_input(l):
     if l in ['exit', 'quit']:
         sys.exit()
 
-    elif l.startswith('stations'):
+    elif l.startswith('stations') or l.startswith('stns'):
         new_stns = l.split()
         if len(new_stns) == 1:
             print(" ".join(stations))
@@ -187,7 +187,7 @@ def process_input(l):
         
     elif l == 'help':
         print("""'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
-To set the remote stations for the session, use the command 'stations' followed by the two letter station IDs separated by spaces. \
+To set the remote stations for the session, use the command 'stations' or 'stns' followed by the two letter station IDs separated by spaces. \
 Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
 Running the 'stations' command without arguments gives the list of active stations. 
 
@@ -227,7 +227,7 @@ setcallbackfunc(prompt, process_input)
 #Main Loop
 while True:
     try:
-        r, w, x = select([sys.stdin], [], [], 0.1)
+        r, w, x = select([sys.stdin], [], [], 0.05)
 
         if sys.stdin in r:
             readline.callback_read_char()
