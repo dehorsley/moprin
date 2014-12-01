@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+#!/usr/bin/env python3 
 #Moprin: oprin for muliple stations!
 #Dave Horsley
 #Nov. 2014
@@ -41,7 +40,7 @@ SAVE = "\033[s"
 RESTORE = "\033[u"
 PREVLINE = "\033[F"
 
-BLACK = "\033[0m"
+RESET = "\033[0m"
 RED =   "\033[31m"
 GREEN = "\033[32m"
 YELLOW ="\033[33m"
@@ -49,7 +48,6 @@ YELLOW ="\033[33m"
 
 #Colours used for the job state
 statecols = {None: YELLOW, False: RED, True: GREEN}
-
 
 #Readline hist and completion
 histfile = os.path.join(os.path.expanduser("~"), ".moprin_hist")
@@ -60,41 +58,49 @@ except IOError:
 atexit.register(readline.write_history_file, histfile)
 
 
-#For readline completion function. We could, in principle, do more fancy things here.
-class Completer:
-    def __init__(self, words):
-        self.words = words
-        self.prefix = None
-    def __call__(self, prefix, index):
-        if prefix != self.prefix:
-            self.matching_words = [ w for w in self.words if w.startswith(prefix) ]
-            self.prefix = prefix
-        try:
-            return self.matching_words[index]
-        except IndexError:
-            return None
-
-
 #Extra commands can go here
-commands = ['clkoff','maserdelay','exit','stations', 'stns']
+commands = ['clkoff','maserdelay','exit','stations', 'stns','iread','bread']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
 #lines starting with '*' are comments and ignored
+#The stcmd.ctl file could be added here too
 try:
-    # f = open('fscmd.ctl')
     f = open('/usr2/fs/control/fscmd.ctl')
     commands.extend( [l.split()[0] for l in f if l[0] != '*'])
-
 except:
     pass
 
 commands.sort()
-completer = Completer(commands)
-readline.parse_and_bind("tab: complete")
-readline.set_completer(completer)
 
-#Class to store info about the previous commands sent,
-#so we can update their status and display it in the correct location
+# Readline completion function. 
+# Readline repeatedly calls the complete function with various index until the function returns None
+def complete(prefix, index):
+    if index == 0:
+        #complete.matches = 
+        if prefix in  ['schedule=', 'log=','proc=']:
+            #TODO: complete based on exp master file
+            pass
+        else:
+            self.matches = [ w for w in self.words if w.startswith(prefix) ]
+
+    else:
+        try:
+            return complete.matches[index]
+        except IndexError:
+            return None
+
+readline.parse_and_bind("tab: complete")
+readline.set_completer(complete)
+
+
+SSH_CMD = ['ssh', '-q',
+                  '-o','"ControlMaster=auto"',
+                  '-o','"ControlPath=~/.ssh/moprin-%r@%h:%p"',
+                  '-o','"ControlPersist 10m"',
+                  ]
+
+
+#Class to store info about commands sent, can update their status, and display it in the correct location in the terminal
 
 class Job:
     def __init__(self, command):
@@ -116,11 +122,11 @@ class Job:
 
         for stn in self.stations:
             global pc
-            self.procs[stn] = Popen(['ssh','-q',pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)],stderr=PIPE,stdout=PIPE)
+            self.procs[stn] = Popen(SSH_CMD.extend([pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)]),stderr=PIPE,stdout=PIPE)
             
 
     def update(self):
-        # Update the states based on procs
+        # Update the states based on procs and render it to the terminal
 
         numdone = 0
         prompt = []
@@ -134,7 +140,7 @@ class Job:
                     self.states[stn] = False
                 numdone += 1
 
-            prompt.append("%s%s%s" %(statecols[self.states[stn]], stn, BLACK))
+            prompt.append("%s%s%s" %(statecols[self.states[stn]], stn, RESET))
 
 
         if numdone == len(self.stations):
