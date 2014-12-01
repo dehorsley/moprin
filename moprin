@@ -79,24 +79,24 @@ def complete(prefix, index):
         #complete.matches = 
         if prefix in  ['schedule=', 'log=','proc=']:
             #TODO: complete based on exp master file
+            complete.matches = [prefix + "r1664$s"]
             pass
         else:
-            self.matches = [ w for w in self.words if w.startswith(prefix) ]
+            complete.matches = [ w for w in commands if w.startswith(prefix) ]
 
-    else:
-        try:
-            return complete.matches[index]
-        except IndexError:
-            return None
+    try:
+        return complete.matches[index]
+    except IndexError:
+        return None
 
 readline.parse_and_bind("tab: complete")
 readline.set_completer(complete)
 
 
 SSH_CMD = ['ssh', '-q',
-                  '-o','"ControlMaster=auto"',
-                  '-o','"ControlPath=~/.ssh/moprin-%r@%h:%p"',
-                  '-o','"ControlPersist 10m"',
+                  '-o',"ControlMaster=auto",
+                  '-o',"ControlPath=~/.ssh/moprin-%r@%h:%p",
+                  '-o',"ControlPersist=10m",
                   ]
 
 
