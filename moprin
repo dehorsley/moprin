@@ -122,7 +122,9 @@ class Job:
 
         for stn in self.stations:
             global pc
-            self.procs[stn] = Popen(SSH_CMD.extend([pc[stn], 'inject_snap','\'%s\'' % command.replace("$s",stn)]),stderr=PIPE,stdout=PIPE)
+            global SSH_CMD
+            cmd = SSH_CMD + [pc[stn], 'inject_snap',"'%s'" % command.replace("$s",stn)]
+            self.procs[stn] = Popen(cmd,stderr=PIPE,stdout=PIPE)
             
 
     def update(self):
