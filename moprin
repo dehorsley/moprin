@@ -123,7 +123,7 @@ class Job:
         for stn in self.stations:
             global pc
             global SSH_CMD
-            cmd = SSH_CMD + [pc[stn], 'inject_snap',"'%s'" % command.replace("$s",stn)]
+            cmd = SSH_CMD + [pc[stn], '/usr2/fs/bin/inject_snap',"'%s'" % command.replace("$s",stn)]
             self.procs[stn] = Popen(cmd,stderr=PIPE,stdout=PIPE)
             
 
