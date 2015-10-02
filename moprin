@@ -62,7 +62,7 @@ atexit.register(readline.write_history_file, histfile)
 commands = ['clkoff','maserdelay','exit','stations', 'stns','iread','bread']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
-#lines starting with '*' are comments and ignored
+#lines starting with '*' are comments and ignored.
 #The stcmd.ctl file could be added here too
 try:
     f = open('/usr2/fs/control/fscmd.ctl')
@@ -93,6 +93,7 @@ readline.parse_and_bind("tab: complete")
 readline.set_completer(complete)
 
 
+# Extra control master files reduce input latency.
 SSH_CMD = ['ssh', '-q',
                   '-o',"ControlMaster=auto",
                   '-o',"ControlPath=~/.ssh/moprin-%r@%h:%p",
