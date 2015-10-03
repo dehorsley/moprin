@@ -25,9 +25,9 @@ readline.end = ctypes.c_int.in_dll(rl_lib,'rl_end')
 
 # the callback needs special treatment:
 rlcallbackfunctype = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)
-def setcallbackfunc(prompt, thefunc):
+def setcallbackfunc(prompt, func):
     prompt = prompt.encode()
-    readline.callback = rlcallbackfunctype(thefunc)
+    readline.callback = rlcallbackfunctype(func)
     rl_lib.rl_callback_handler_install(prompt, readline.callback)
 
 readline.callback_handler_install = setcallbackfunc
@@ -89,8 +89,9 @@ def complete(prefix, index):
     except IndexError:
         return None
 
-readline.parse_and_bind("tab: complete")
+readline.parse_and_bind("tab: menu-complete")
 readline.set_completer(complete)
+readline.set_completer_delims(" @$><&")
 
 
 SSH_CMD = ['ssh', '-q',
