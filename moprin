@@ -25,9 +25,10 @@ readline.end = ctypes.c_int.in_dll(rl_lib,'rl_end')
 
 # the callback needs special treatment:
 rlcallbackfunctype = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)
-def setcallbackfunc(prompt, func):
+def setcallbackfunc(prompt, f):
     prompt = prompt.encode()
-    readline.callback = rlcallbackfunctype(func)
+    # Maintain a reference to callback function to make sure the GC doesn't cleanup it up.
+    readline.callback = rlcallbackfunctype(f) 
     rl_lib.rl_callback_handler_install(prompt, readline.callback)
 
 readline.callback_handler_install = setcallbackfunc
