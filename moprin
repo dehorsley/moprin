@@ -77,8 +77,17 @@ GREEN = "\033[32m"
 YELLOW ="\033[33m"
 
 
+#Job states
+
+from enum import Enum
+class State(Enum):
+    pending = 0
+    complete = 1
+    failed = -1
+
+
 #Colours used for the job state
-statecols = {None: YELLOW, False: RED, True: GREEN}
+statecols = {State.pending: YELLOW, State.failed: RED, State.complete: GREEN}
 
 #Readline hist and completion
 histfile = os.path.join(os.path.expanduser("~"), ".moprin_hist")
@@ -153,15 +162,15 @@ class Job:
         self.command = command
 
         global ln
-        self.ln = ln-1
         global stations
+        self.ln = ln-1
         self.stations = stations
 
         # Dict of the Popen objects for each request
         self.procs = dict.fromkeys(stations) 
+
         # states of each process
-        #   None: pending, True: done successfully, False: failed
-        self.states = dict.fromkeys(stations) 
+        self.states = dict.fromkeys(stations,State.pending) 
 
         # Global complete flag
         self.done = False
@@ -175,21 +184,20 @@ class Job:
 
     def update(self):
         # Update the states based on procs and render it to the terminal
-
         numdone = 0
         prompt = []
 
         for stn in self.stations:
-            proc = self.procs[stn]
-            if proc.poll() != None:
-                if proc.returncode == 0:
-                    self.states[stn] = True
-                else:
-                    self.states[stn] = False
-                numdone += 1
+            if self.states[stn] == State.pending:
+                proc = self.procs[stn]
+                if proc.poll() != None:
+                    if proc.returncode == 0:
+                        self.states[stn] = State.complete
+                    else:
+                        self.states[stn] = State.failed
+                    numdone += 1
 
             prompt.append("%s%s%s" %(statecols[self.states[stn]], stn, RESET))
-
 
         if numdone == len(self.stations):
             self.done = True
@@ -204,16 +212,18 @@ class Job:
 
 #TODO: move these config file
 #Fildsystem computers of the corresponding station id
-pc =  { "hb": "pcfshb",
-        "ke": "pcfske",
-        "yg": "pcfsyg",
-        "ho": "hobart",
-        "cd": "pcfscd",
+pc =  { "hb": "pcfshb.phys.utas.edu.au",
+        "ke": "pcfske.phys.utas.edu.au",
+        "yg": "pcfsyg.phys.utas.edu.au",
+        "cd": "pcfscd.phys.utas.edu.au",
+        "ho": "hobart.phys.utas.edu.au",
         }
 
 def process_input(l):
     global stations
     global jobs
+    global ln
+    ln = ln + 1
 
     if l is None:
         print("")
@@ -224,8 +234,6 @@ def process_input(l):
     if l in ['exit', 'quit']:
         sys.exit()
 
-    global ln
-    ln = ln + 1
 
     readline.add_history(l)
 
@@ -277,7 +285,7 @@ while True:
         if sys.stdin in r:
             readline.callback_read_char()
         else:
-            #Between key presses, tidy up the rest
+            #Between key presses, tidy up the jobs
             for i, job in enumerate(jobs):
                 job.update()
                 if job.done:
@@ -287,11 +295,11 @@ while True:
         print("^C")
         ln += 1
 
-        # Unset RL_STATE_ISEARCH flag
+        # Exit search history search
         if readline.state.value & readline.state_flags['RL_STATE_ISEARCH']:
             readline.state.value &= ~readline.state_flags['RL_STATE_ISEARCH']
 
-        # Set RL_STATE_DONE flag
+        # Put in normal state
         if not readline.state.value & readline.state_flags['RL_STATE_DONE']:
             readline.state.value |= readline.state_flags['RL_STATE_DONE']
 
