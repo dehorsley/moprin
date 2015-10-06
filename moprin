@@ -6,33 +6,63 @@
 import atexit
 import os
 import sys
-import time
 from select import select
-import socket
+
 from subprocess import Popen, PIPE
-from random import random
 
 import readline
 
-# python doesn't include a binding to rl_callback_read_char, so we have to import it manually
+
 import ctypes
-rl_lib = ctypes.cdll.LoadLibrary("libreadline.so.6")
+from ctypes.util import find_library
+
+rl_lib = ctypes.CDLL(find_library("readline"))
+
+# python doesn't include a binding to rl_callback_read_char, so we have to import it manually
 readline.callback_handler_remove = rl_lib.rl_callback_handler_remove
 readline.callback_read_char = rl_lib.rl_callback_read_char
-readline.delete_text = rl_lib.rl_delete_text
-readline.redisplay = rl_lib.rl_redisplay
-readline.end = ctypes.c_int.in_dll(rl_lib,'rl_end')
 
-# the callback needs special treatment:
+# the callback needs special treatment
 rlcallbackfunctype = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)
 def setcallbackfunc(prompt, f):
     prompt = prompt.encode()
     # Maintain a reference to callback function to make sure the GC doesn't cleanup it up.
     readline.callback = rlcallbackfunctype(f) 
     rl_lib.rl_callback_handler_install(prompt, readline.callback)
-
 readline.callback_handler_install = setcallbackfunc
 
+#Since we're handling display ourselves, we need some extra functions
+readline.redisplay = rl_lib.rl_redisplay
+readline.free_line_state = rl_lib.rl_free_line_state
+
+readline.state =  ctypes.c_int.in_dll(rl_lib, 'rl_readline_state')
+readline.state_flags = {                      # <readline/readline.h>
+    'RL_STATE_INITIALIZING': 0x0000001,  # initializing
+    'RL_STATE_INITIALIZED':  0x0000002,  # initialization done
+    'RL_STATE_TERMPREPPED':  0x0000004,  # terminal is prepped
+    'RL_STATE_READCMD':      0x0000008,  # reading a command key
+    'RL_STATE_METANEXT':     0x0000010,  # reading input after ESC
+    'RL_STATE_DISPATCHING':  0x0000020,  # dispatching to a command
+    'RL_STATE_MOREINPUT':    0x0000040,  # reading more input in a command function
+    'RL_STATE_ISEARCH':      0x0000080,  # doing incremental search
+    'RL_STATE_NSEARCH':      0x0000100,  # doing non-inc search
+    'RL_STATE_SEARCH':       0x0000200,  # doing a history search
+    'RL_STATE_NUMERICARG':   0x0000400,  # reading numeric argument
+    'RL_STATE_MACROINPUT':   0x0000800,  # getting input from a macro
+    'RL_STATE_MACRODEF':     0x0001000,  # defining keyboard macro
+    'RL_STATE_OVERWRITE':    0x0002000,  # overwrite mode
+    'RL_STATE_COMPLETING':   0x0004000,  # doing completion
+    'RL_STATE_SIGHANDLER':   0x0008000,  # in readline sighandler
+    'RL_STATE_UNDOING':      0x0010000,  # doing an undo
+    'RL_STATE_INPUTPENDING': 0x0020000,  # rl_execute_next called
+    'RL_STATE_TTYCSAVED':    0x0040000,  # tty special chars saved
+    'RL_STATE_CALLBACK':     0x0080000,  # using the callback interface
+    'RL_STATE_VIMOTION':     0x0100000,  # reading vi motion arg
+    'RL_STATE_MULTIKEY':     0x0200000,  # reading multiple-key command
+    'RL_STATE_VICMDONCE':    0x0400000,  # entered vi command mode at least once
+    'RL_STATE_REDISPLAYING': 0x0800000,  # updating terminal display
+    'RL_STATE_DONE':         0x1000000,  # done; accepted line
+}
 
 #ANSI codes for cursor motion and colours
 HIDE = "\033[?25l"
@@ -60,7 +90,7 @@ atexit.register(readline.write_history_file, histfile)
 
 
 #Extra commands can go here
-commands = ['clkoff','maserdelay','exit','stations', 'stns','iread','bread']
+commands = ['clkoff','maserdelay','exit','stations', 'stns','iread','bread','schedule=','log=','proc=']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
 #lines starting with '*' are comments and ignored
@@ -73,11 +103,26 @@ except:
 
 commands.sort()
 
+
+helpstr = """
+'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
+To set the remote stations for the session, use the command 'stations' or 'stns' followed by the two letter station IDs separated by spaces. \
+Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
+Running the 'stations' command without arguments gives the list of active stations. 
+
+The text '$s' in a command will be replaced by the corresponding two-letter station ID when sent to the remote field systems.
+
+To exit moprin, type 'exit' or press Ctrl+D.
+
+History is stored in ~/.moprin_hist and tab-completion is enabled.
+"""
+
 # Readline completion function. 
 # Readline repeatedly calls the complete function with various index until the function returns None
 def complete(prefix, index):
     if index == 0:
         #complete.matches = 
+        # print(prefix)
         if prefix in  ['schedule=', 'log=','proc=']:
             #TODO: complete based on exp master file
             complete.matches = [prefix + "r1664$s"]
@@ -103,7 +148,6 @@ SSH_CMD = ['ssh', '-q',
 
 
 #Class to store info about commands sent, can update their status, and display it in the correct location in the terminal
-
 class Job:
     def __init__(self, command):
         self.command = command
@@ -154,9 +198,11 @@ class Job:
 
         global ln
         #TODO: be more intelligent about moving up lines
+        #TODO: only try to draw job if it's still on screen (use termios to check terminal size)
         print( "".join([HIDE , SAVE , (ln-self.ln)*PREVLINE ,  prompt , "> " , RESTORE , SHOW]) ,end='',flush=True)
 
 
+#TODO: move these config file
 #Fildsystem computers of the corresponding station id
 pc =  { "hb": "pcfshb",
         "ke": "pcfske",
@@ -175,14 +221,15 @@ def process_input(l):
 
     l = l.decode()
     l = l.strip()
+    if l in ['exit', 'quit']:
+        sys.exit()
 
     global ln
     ln = ln + 1
 
-    if l in ['exit', 'quit']:
-        sys.exit()
+    readline.add_history(l)
 
-    elif l.startswith('stations') or l.startswith('stns'):
+    if l.startswith('stations') or l.startswith('stns'):
         new_stns = l.split()
         if len(new_stns) == 1:
             print(" ".join(stations))
@@ -194,36 +241,23 @@ def process_input(l):
                     break
             else:
                 stations = new_stns
+            prompt = '%s> ' % '-'.join(stations)
+            setcallbackfunc(prompt, process_input)
         
     elif l == 'help':
-        print("""'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
-To set the remote stations for the session, use the command 'stations' or 'stns' followed by the two letter station IDs separated by spaces. \
-Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
-Running the 'stations' command without arguments gives the list of active stations. 
-
-The text '$s' in a command will be replaced by the corresponding two-letter station ID when sent to the remote field systems.
-
-To exit moprin, type 'exit' or press Ctrl+D.
-
-History is stored in ~/.moprin_hist and tab-completion is enabled.
-""")
+        print(helpstr)
     
     elif l != '':
-        readline.add_history(l)
         #async send commands via ssh
         j = Job(l)
         jobs.append(j)
 
-        # print(len(jobs))
-        # ln += 1
-
-    prompt = '%s> ' % '-'.join(stations)
-    setcallbackfunc(prompt, process_input)
 
 #Globals to store the line number, the running jobs and the slave stations
 ln = 1
 jobs = []
 if len(sys.argv) == 1:
+    #TODO: move to config
     stations = ["hb", "ke", "yg"]
 else:
     stations = sys.argv[1:]
@@ -234,9 +268,10 @@ else:
 
 prompt = '%s> ' % '-'.join(stations)
 setcallbackfunc(prompt, process_input)
-#Main Loop
+
 while True:
     try:
+        #Wait for input on stdin, or timeout
         r, w, x = select([sys.stdin], [], [], 0.05)
 
         if sys.stdin in r:
@@ -247,11 +282,23 @@ while True:
                 job.update()
                 if job.done:
                     del jobs[i]
-
-    except KeyboardInterrupt: #Kill line on Ctrl+C
+    except KeyboardInterrupt: 
+        #Kill line on Ctrl+C
         print("^C")
         ln += 1
-        readline.delete_text(0,readline.end)
+
+        # Unset RL_STATE_ISEARCH flag
+        if readline.state.value & readline.state_flags['RL_STATE_ISEARCH']:
+            readline.state.value &= ~readline.state_flags['RL_STATE_ISEARCH']
+
+        # Set RL_STATE_DONE flag
+        if not readline.state.value & readline.state_flags['RL_STATE_DONE']:
+            readline.state.value |= readline.state_flags['RL_STATE_DONE']
+
+        readline.free_line_state()
+
         prompt = '%s> ' % '-'.join(stations)
         setcallbackfunc(prompt, process_input)
         readline.redisplay()
+    # except: 
+    #     pass
