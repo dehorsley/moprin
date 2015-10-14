@@ -210,11 +210,11 @@ class Job:
 
 #TODO: move these config file
 #Fildsystem computers of the corresponding station id
-pc =  { "hb": "pcfshb.phys.utas.edu.au",
-        "ke": "pcfske.phys.utas.edu.au",
-        "yg": "pcfsyg.phys.utas.edu.au",
-        "cd": "pcfscd.phys.utas.edu.au",
-        "ho": "hobart.phys.utas.edu.au",
+pc =  { "hb": "oper@pcfshb.phys.utas.edu.au",
+        "ke": "oper@pcfske.phys.utas.edu.au",
+        "yg": "oper@pcfsyg.phys.utas.edu.au",
+        "cd": "oper@pcfscd.phys.utas.edu.au",
+        "ho": "oper@hobart.phys.utas.edu.au",
         }
 
 def process_input(l):
