@@ -130,12 +130,10 @@ History is stored in ~/.moprin_hist and tab-completion is enabled.
 # Readline repeatedly calls the complete function with various index until the function returns None
 def complete(prefix, index):
     if index == 0:
-        #complete.matches = 
-        # print(prefix)
-        if prefix in  ['schedule=', 'log=','proc=']:
-            #TODO: complete based on exp master file
-            complete.matches = [prefix + "r1664$s"]
-            pass
+        if prefix in ['schedule=', 'log=','proc=']:
+            global stations
+            nextexp_proc = Popen(['nextexp','-a'] + stations, stdout=PIPE)
+            complete.matches = [prefix + nextexp_proc.stdout.read().decode().strip() + "$s"]
         else:
             complete.matches = [ w for w in commands if w.startswith(prefix) ]
 
@@ -146,7 +144,7 @@ def complete(prefix, index):
 
 readline.parse_and_bind("tab: menu-complete")
 readline.set_completer(complete)
-readline.set_completer_delims(" @$><&")
+readline.set_completer_delims(" ")
 
 
 SSH_CMD = ['ssh', '-q',
