@@ -36,7 +36,7 @@ readline.redisplay = rl_lib.rl_redisplay
 readline.free_line_state = rl_lib.rl_free_line_state
 
 readline.state =  ctypes.c_int.in_dll(rl_lib, 'rl_readline_state')
-readline.state_flags = {                      # <readline/readline.h>
+readline.state_flags = {                 # <readline/readline.h>
     'RL_STATE_INITIALIZING': 0x0000001,  # initializing
     'RL_STATE_INITIALIZED':  0x0000002,  # initialization done
     'RL_STATE_TERMPREPPED':  0x0000004,  # terminal is prepped
@@ -99,7 +99,7 @@ atexit.register(readline.write_history_file, histfile)
 
 
 #Extra commands can go here
-commands = ['clkoff','maserdelay','exit','stations', 'stns','iread','bread','schedule=','log=','proc=']
+commands = ['systemp12','clkoff','maserdelay','exit','stations', 'stns','iread','bread','schedule=','log=','proc=']
 
 #If the fscmd.ctl file is available, append the commands to the tab completion list
 #lines starting with '*' are comments and ignored.
@@ -114,12 +114,15 @@ commands.sort()
 
 
 helpstr = """
-'Moprin' is 'oprin' for multiple remote stations. It can send command to remote field systems over ssh. \
-To set the remote stations for the session, use the command 'stations' or 'stns' followed by the two letter station IDs separated by spaces. \
-Alternatively, you can give the list of remote stations in the arguments when you start moprin. \
-Running the 'stations' command without arguments gives the list of active stations. 
+'Moprin' is 'oprin' for multiple remote stations. It can send command to remote
+field systems over ssh.  To set the remote stations for the session, use the
+command 'stations' or 'stns' followed by the two letter station IDs separated
+by spaces.  Alternatively, you can give the list of remote stations in the
+arguments when you start moprin.  Running the 'stations' command without
+arguments gives the list of active stations. 
 
-The text '$s' in a command will be replaced by the corresponding two-letter station ID when sent to the remote field systems.
+The text '$s' in a command will be replaced by the corresponding two-letter
+station ID when sent to the remote field systems.
 
 To exit moprin, type 'exit' or press Ctrl+D.
 
@@ -234,7 +237,8 @@ def process_input(l):
         sys.exit()
 
 
-    readline.add_history(l)
+    if not l:
+        return
 
     if l.startswith('stations') or l.startswith('stns'):
         new_stns = l.split()
